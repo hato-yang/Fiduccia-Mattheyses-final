@@ -7,7 +7,7 @@ void fiduccia_mattheyses_algorithm(struct condensed *information)
 	printf("max_nets:%d\n", information->max_nets);
 	calculate_initial_gains_wrapper(information); // gain越高cut越多，優先移動，以?儲存?????
 	///////////////////////
-	struct node *node0 = information->partition_A->cells_in_partition->head->next;
+	/*struct node *node0 = information->partition_A->cells_in_partition->head->next;
 	while (node0 != information->partition_A->cells_in_partition->tail)
 	{
 		struct cell *cell0 = (struct cell *)node0->data_structure;
@@ -20,7 +20,7 @@ void fiduccia_mattheyses_algorithm(struct condensed *information)
 		struct cell *cell1 = (struct cell *)node1->data_structure;
 		printf("%d      %d           %4d    %4d\n", cell1->identifier + 1, cell1->which_partition, cell1->area, cell1->area2); //
 		node1 = node1->next;
-	}
+	}*/
 	printf("#################################\n"); /////////////
 	////////////////////
 	int cells_can_still_be_moved = 1;
@@ -45,7 +45,7 @@ void fiduccia_mattheyses_algorithm(struct condensed *information)
 		if (DOUBLE_CHECK_CUTSTATE_VALUES)
 			check_cutstate_values(information);
 
-		if (FM_CUTOFF && (information->current_cutstate > (information->lowest_cutstate + FM_CUTOFF_THRESHOLD)))
+		if (FM_CUTOFF && (information->current_cutstate > (information->lowest_cutstate * FM_CUTOFF_THRESHOLD)))
 			break;
 
 		timestep++;
@@ -208,6 +208,7 @@ void update_max_gain_pointer(struct partition *partition)
 // This function choses one cell to move to the other partition, making sure that balance is not upset.
 //   It then updates the gains of cells on connected nets
 int round_num = 1; /////////////////分割圈數
+int rate = 1;
 int FM_pass(struct condensed *information)
 {
 	// Access variables;
@@ -250,22 +251,22 @@ int FM_pass(struct condensed *information)
 	// Chose base_cell
 	// Either other base_cell is not a candidate or (cell has the highest gain and does not mess up balance)
 	// printf("partition A0 area: %4d \npartition B1 area: %4d \n", information->partition_A->total_partition_area, information->partition_B->total_partition_area); ////面積測試
-	// information->partition_A->total_partition_area - cell_A->area > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance
-	// information->partition_B->total_partition_area - cell_B->area2 > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance1
+	// information->partition_A->total_partition_area - cell_A->area > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance_Macro
+	// information->partition_B->total_partition_area - cell_B->area2 > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance1_Macro
 	// information->partition_A->total_partition_area - cell_A->area > (uA - information->tolerance)
 	// information->partition_B->total_partition_area - cell_B->area2 > (uB - information->tolerance1)
 	double uA = (double)information->die_area * information->utilA / 100;
 	double uB = (double)information->die_area * information->utilB / 100;
 	// printf("%f,%f\n%d,%d,%ld\n", uA, uB, information->utilA, information->utilB, information->die_area);
-	// printf("uA: %f, uB: %f\n", uA, uB);
+	// printf("uA: %f, uB: %f\nuA-m: %f, uB-m: %f\n", uA, uB, uA - information->tolerance_Macro, uB - information->tolerance1_Macro);
 	// printf("pA: %ld, pB: %ld\n", information->partition_A->total_partition_area - cell_A->area, information->partition_B->total_partition_area - cell_B->area2);
 
-	if ((node_A != NULL) && (information->partition_A->total_partition_area - cell_A->area > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance_Macro))
+	if ((node_A != NULL) && (/*(information->partition_A->total_partition_area - cell_A->area)*/ (information->partition_B->total_partition_area + cell_A->area2) <= uB + information->tolerance1_Macro * rate))
 	{
 		base_cell = cell_A;
 		node_to_be_freed = node_A;
 	}
-	else if ((node_B != NULL) && (information->partition_B->total_partition_area - cell_B->area2 > ((information->partition_A->total_partition_area + information->partition_B->total_partition_area) / 2) - information->tolerance1_Macro))
+	else if ((node_B != NULL) && (/*(information->partition_B->total_partition_area - cell_B->area2)*/ (information->partition_A->total_partition_area + cell_B->area) <= uA + information->tolerance_Macro * rate))
 	{
 		base_cell = cell_B;
 		node_to_be_freed = node_B;
@@ -275,12 +276,24 @@ int FM_pass(struct condensed *information)
 		printf("No cells can be chosen\n");
 		return 0;
 	}
-
+	rate = rate - 0.01;
 	// Set origin and destination references
 	int base_cell_origin, base_cell_destination;
 
 	base_cell_origin = base_cell->which_partition;
 	base_cell_destination = !(base_cell_origin);
+	//////////////////// 提前更新面積
+	if (base_cell_origin == 0)
+	{
+		information->partition_A->total_partition_area -= base_cell->area;
+		information->partition_B->total_partition_area += base_cell->area2;
+	}
+	if (base_cell_origin == 1)
+	{
+		information->partition_A->total_partition_area += base_cell->area;
+		information->partition_B->total_partition_area -= base_cell->area2;
+	}
+	/////////////////////
 
 	// Switch the base_cell partition
 	base_cell->which_partition = base_cell_destination;
@@ -367,7 +380,7 @@ int FM_pass(struct condensed *information)
 	}
 
 	// Check and update cutstate value
-	if (new_cutsize < information->lowest_cutstate)
+	if (new_cutsize < information->lowest_cutstate && new_cutsize > 0)
 	{
 		information->lowest_cutstate = new_cutsize;
 		////////////////////print cell output
@@ -376,8 +389,8 @@ int FM_pass(struct condensed *information)
 		fprintf(Output, "Lowest cutstate achieved: %d\n", information->lowest_cutstate);
 		fprintf(Output, "max_in_A : %d  Macro : %d , max_in_B : %d  Macro : %d\n", information->tolerance, information->tolerance_Macro, information->tolerance1, information->tolerance1_Macro);
 		double uA = (double)information->die_area * information->utilA / 100;
-		double uB = (double)information->die_area * information->utilA / 100;
-		fprintf(Output, "maxutil_A : %f , maxutil_B : %f\n", (float)information->final_area / information->die_area, (float)information->final_area2 / information->die_area);
+		double uB = (double)information->die_area * information->utilB / 100;
+		fprintf(Output, "maxutil_A : %lf , maxutil_B : %lf\n", (double)information->final_area / information->die_area, (double)information->final_area2 / information->die_area);
 		fprintf(Output, "die_size : %ld maxutil_area_A : %f , maxutil_area_B : %f\n", information->die_area, uA, uB);
 		long area0 = 0;
 		long area1 = 0;
@@ -409,16 +422,16 @@ int FM_pass(struct condensed *information)
 		////////////////////
 	}
 	information->current_cutstate = new_cutsize;
-	////////////暫時註解掉
+	//////////暫時註解掉
 	// FILE *shmetisInput = fopen("Output_minimumcut", "a"); //////////////寫入Output
 	// if (new_cutsize <= information->lowest_cutstate)
 	// {
-	// 	fprintf(shmetisInput, "cell   partition\n");					  /////////////寫入Output
-	// 	fprintf(shmetisInput, "cut: %d  Round:%d\n", new_cutsize, round); /////////////寫入Output
+	// 	fprintf(shmetisInput, "cell   partition\n");						  /////////////寫入Output
+	// 	fprintf(shmetisInput, "cut: %d  Round:%d\n", new_cutsize, round_num); /////////////寫入Output
 	// }
 
 	////////////////////print cell output
-	printf("chosen cell : %d\n", base_cell->identifier + 1); //
+	// printf("chosen cell : %d\n", base_cell->identifier + 1); //
 	long area0 = 0;
 	long area1 = 0;
 	struct node *node0 = information->partition_A->cells_in_partition->head->next;
@@ -429,7 +442,7 @@ int FM_pass(struct condensed *information)
 			area0 += cell0->area;
 		if (cell0->which_partition == 1)
 			area1 += cell0->area2;
-		printf("%d      %d           %4d    %4d\n", cell0->identifier + 1, cell0->which_partition, cell0->area, cell0->area2); //
+		// printf("%d      %d           %4d    %4d\n", cell0->identifier + 1, cell0->which_partition, cell0->area, cell0->area2); //
 		node0 = node0->next;
 	}
 	struct node *node1 = information->partition_B->cells_in_partition->head->next;
@@ -440,7 +453,7 @@ int FM_pass(struct condensed *information)
 			area1 += cell1->area2;
 		if (cell1->which_partition == 0)
 			area0 += cell1->area;
-		printf("%d      %d           %4d    %4d\n", cell1->identifier + 1, cell1->which_partition, cell1->area, cell1->area2); //
+		// printf("%d      %d           %4d    %4d\n", cell1->identifier + 1, cell1->which_partition, cell1->area, cell1->area2); //
 		node1 = node1->next;
 	}
 	////////////////////
@@ -450,7 +463,7 @@ int FM_pass(struct condensed *information)
 	}
 	// fclose(shmetisInput); // 寫入Output       暫時註解掉
 	/////////////partition面積計算優化
-	if (base_cell_origin == 0)
+	/*if (base_cell_origin == 0)
 	{
 		information->partition_A->total_partition_area -= base_cell->area;
 		information->partition_B->total_partition_area += base_cell->area2;
@@ -459,7 +472,8 @@ int FM_pass(struct condensed *information)
 	{
 		information->partition_A->total_partition_area += base_cell->area;
 		information->partition_B->total_partition_area -= base_cell->area2;
-	}
+	}*/
+	printf("chosen cell : C%d    gain:%d\n", base_cell->identifier + 1, base_cell->gain);
 	printf("A: %4ld\n", information->partition_A->total_partition_area);
 	printf("B: %4ld\n", information->partition_B->total_partition_area);
 	printf("\nround : %d \n", round_num); /////////////
@@ -553,12 +567,10 @@ int change_gain_of_cell_in_net(struct cell *base_cell, cells_to_change scope, ch
 		if (operation == INCREMENT)
 		{
 			new_cutsize++;
-			printf("000000000000000000000cut+\n");
 		}
 		else
 		{
 			new_cutsize--;
-			printf("000000000000000000000cut-\n");
 		}
 	}
 	return new_cutsize;

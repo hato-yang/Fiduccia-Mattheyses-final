@@ -15,8 +15,8 @@
 #define NO 0
 
 // Toy files
-#define TEST_ARE_FILENAME "data/testdata3.are"
-#define TEST_NETD_FILENAME "data/testdata3.netD"
+#define TEST_ARE_FILENAME "2023data/case1.are"
+#define TEST_NETD_FILENAME "2023data/case1.netD"
 
 //*************************************************************************
 //*******************      USER DEFINED OPTIONS    ************************
@@ -53,7 +53,7 @@
 
 // This option simply prints the cutstate value of the system at every pass
 // Set to NO by default
-#define PRINT_PASS_CUTSTATE_VALUES NO
+#define PRINT_PASS_CUTSTATE_VALUES YES
 
 // This option simply prints the execution time of the whole program (data input included)
 // Set to NO by default
@@ -77,7 +77,7 @@
 // At what point does the algorithm stop?
 // Keep in mind that 0 allows no movement for the algorithm to get out of local minima
 // Minimum 0, integer
-#define FM_CUTOFF_THRESHOLD 2
+#define FM_CUTOFF_THRESHOLD 1.01
 
 // Should never be turned on without cutoff also being on.
 // This is because the last pass is always the partition copied over
@@ -89,7 +89,7 @@
 //  output as the starting position
 // Minimum 1, integer values
 // MUST BE 1 if FM_REPEAT is NO (errors otherwise)
-#define FM_NUM_PASSES 1
+#define FM_NUM_PASSES 1 // 10
 
 // What losses in the lowest cutstate does FM accept before it switches to a GA?
 #define GA_TRIGGER 40
@@ -113,6 +113,7 @@ struct condensed
 	struct partition *partition_B;
 
 	int total_pin_count;
+	int max_cell_count; /////
 	// The area of the largest cell is used as the balance tolerance
 	int tolerance;
 	int tolerance1; // 儲存第二製程最大面積
@@ -138,7 +139,7 @@ struct condensed
 	int current_cutstate;
 	struct chromosome *FM_chromosome;
 };
-
+/// yes new
 void import_data_and_run_algorithm(char *, char *);
 void reset_cells_and_nets(struct condensed *);
 void free_all_memory(struct condensed *);
